@@ -1,0 +1,9 @@
+{
+  "ignores": ["**/*_.md", "**/*.md_"],
+  "config": {
+    "line-length": false, //MD013
+    "no-duplicate-heading": false, //MD024 
+    "no-inline-html": false, //MD033
+    "first-line-heading": false //MD041
+  }
+}
