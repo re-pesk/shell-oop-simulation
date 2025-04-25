@@ -31,7 +31,7 @@ function class -a class_name
   # Class method: data
   function $class_name.data -V class_data_varname -a object_name
     if test -n "$object_name"
-      string match -ar -- '^'$object_name.'[^:]+:=.+$' $$class_data_varname
+      string match -ar -- '^'$object_name.'(?:[^:]|\\:)+:=.+$' $$class_data_varname
       return
     end
     string match -ar -- '^.+$' $$class_data_varname
@@ -77,14 +77,29 @@ function class -a class_name
     set -a "$class_data_varname" "$object_name_key:=$value"
   end
 
-  # Class method: toString
+  # Class method: toString (arguments: object_name)
   function $class_name.toString -V class_name -a object_name
     if test -z "$object_name"
       echo "Error: missing object name" >&2
       return 1
     end
-    printf "%s %s " "$class_name.new" "$object_name" (string match -agr '^'$object_name.'([^:]+:=.+)$' ($class_name.data $object_name)) \n
+    printf "%s %s " "$class_name.new" "$object_name" (string match -agr '^'$object_name.'((?:[^:]|\\:):=.+)$' ($class_name.data $object_name)) \n
   end
+
+  # Class method: delete (arguments: object_name)
+  function $class_name.delete -V class_name -V class_data_varname -a object_name
+    if test -z "$object_name"
+      echo "Error: missing object name" >&2
+      return 1
+    end
+    # string match -arv '^'$object_name.'(?:[^:]|\\:)+:=.+$' $$class_data_varname
+    set $class_data_varname (string match -arv '^'$object_name.'(?:[^:]|\\:)+:=.+$' $$class_data_varname)
+    # set funcs (functions -n | string match -ar '^person3.[^ ]+$')
+    for fun in (functions -n | string match -ar '^person3.[^ ]+$')
+      functions -e "$fun"
+    end
+  end
+
 
   # Class method - instance constructor: <class_name> (arguments: object_name:="names list" ) 
   function $class_name.new -V class_name -V class_data_varname -V field_list -a object_name
@@ -107,6 +122,9 @@ function class -a class_name
 
     # Instance method: alias of class method
     alias $object_name.toString "$class_name.toString $object_name"
+
+    # Instance method: alias of class method
+    alias $object_name.delete "$class_name.delete $object_name"
   end
 
 end

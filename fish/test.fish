@@ -54,8 +54,7 @@ function classTests
 
   class Person name age
   echo "Person.fieldList =>" (Person.fieldList)
-  echo Person.new person1 Alice 28
-  Person.new person1 Alice 28
+  echo "Person.new person1 Alice 28"; Person.new person1 Alice 28
   echo "person1.data =>" (person1.data)
   echo "count (person1.data) =>" (count (person1.data))
   echo "Person.data =>" (Person.data)
@@ -65,8 +64,7 @@ function classTests
   echo "person1.getVal name =>" (person1.getVal name)
   echo "person1.getVal surname =>" (person1.getVal surname)
   echo "person1.getEntry name =>" (person1.getEntry name)
-  echo person1.setVal name John
-  person1.setVal name John
+  echo "person1.setVal name John"; person1.setVal name John
   echo "person1.getVal name =>" (person1.getVal name)
   echo "person1.getEntry name =>" (person1.getEntry name)
   echo "Person.getVal person1 name =>" (Person.getVal person1 name)
@@ -74,15 +72,13 @@ function classTests
   echo "Person.data =>" (Person.data) \n
   
   echo "person1.getVal age =>" (person1.getVal age)
-  echo person1.setVal age 29
-  person1.setVal age 29
+  echo "person1.setVal age 29"; person1.setVal age 29
   echo "person1.getVal age =>" (person1.getVal age)
   echo "Person.data =>" (Person.data) \n
 
   echo "count (Person.data) =>" (count (Person.data))
   echo "count (person1.data) =>" (count (person1.data))
-  echo person1.setVal hair blond
-  person1.setVal hair blond
+  echo "person1.setVal hair blond"; person1.setVal hair blond
   echo "count (person1.data) =>" (count (person1.data))
   echo "count (Person.data) =>" (count (Person.data))
   echo "Person.data =>" (Person.data) \n
@@ -94,8 +90,7 @@ function classTests
   echo "Person.data =>" (Person.data)
   echo "Person.toString =>" (Person.toString) \n
 
-  echo Person.new person2 Alice 28
-  Person.new person2 Alice 28
+  echo "Person.new person2 Alice 28"; Person.new person2 Alice 28
   echo "Person.data =>" (Person.data) \n
 
   echo "person2.sayHello =>" (person2.sayHello)
@@ -105,14 +100,19 @@ function classTests
   echo "Person_class_data =>" $Person_class_data \n
   # return
 
-  echo Person.new person3 name:=Austėja age:=30
-  Person.new person3 name:=Austėja age:=30
+  echo "Person.new person3 name:=Austėja age:=30"; Person.new person3 name:=Austėja age:=30
   echo "person3.data =>" (person3.data)
   echo "Person.data =>" (Person.data)
   echo "Person.toString person3 =>" (Person.toString person3) \n
 
+  echo "Person.data =>" (Person.data)
+  # echo "Person.delete person3"; Person.delete person3
+  echo "person3.delete"; person3.delete
+  echo "Person.data =>" (Person.data)
+  echo "functions -q person3.delete =>" (functions -q "person3.delete" && echo true || echo false)
+  
 end
 
 # simpleTests
 classTests
-classTestsNew
+# classTestsNew
