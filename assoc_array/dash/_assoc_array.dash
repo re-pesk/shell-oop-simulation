@@ -1,0 +1,156 @@
+#!/usr/bin/env -S dash
+
+# function to get item from substitution string by key
+getValueByKey() (
+  local array_string="$1"
+  local key_string="$2"
+  # echo array_string $array_string >&2
+  # echo key_string $key_string >&2
+  echo "$array_string" | while read -r item; do
+    # echo item $item >&2
+    case "$item" in
+      ( $2::* )
+        # echo key $key_string >&2
+        # echo value "${item#*::}" >&2
+        echo "${item#*::}"
+        # return
+        ;;
+      ( * )
+        # echo 'key does not exist' >&2
+        ;;
+    esac 
+  done
+)
+
+getIndexByKey() (
+  local array_string="$1"
+  local key_string="$2"
+  # echo key_string $key_string >&2
+  local index=0
+  echo "$array_string" | while read -r item; do
+    index=$(( index + 1 ))
+    case "$item" in
+      ( $2::* )
+        # echo key_string $key_string >&2
+        # echo '${item#*::}' "${item#*::}" >&2
+        echo "${index}"
+        ;;
+      ( * )
+        # echo 'key does not exist' >&2
+        ;;
+    esac 
+  done
+)
+
+setEntry() (
+  local new_entry="$2"
+  local key=${2%::*}
+  local replaced="false"
+  local array_tmp=$(mktemp)
+  echo "$1" > "$array_tmp"
+  trap "rm -f $array_tmp" EXIT
+  while read -r item; do
+    if [ "$key" != "${item%::*}" ]; then 
+      echo ${item}
+      continue
+    fi
+    echo ${new_entry}
+    replaced="true"
+  done < $array_tmp
+
+  if [ "$replaced" = "false" ]; then
+    echo ${new_entry}
+  fi
+)
+
+setPair () {
+  local array_string="$1"
+  local key="$2"
+  local value="$3"
+
+  if [ -z "$array_string" ]; then
+    echo "$key::$value"
+    return
+  fi
+
+  setEntry "$array_string" "$key::$value"
+}
+
+mergeArrays() (
+
+  base_array="$1"
+  merge_array="$2"
+
+  countKeyOccurence() {
+    local key="$1"
+    local line_no="$2"
+    local count=0
+    local index=1
+
+    while [ "$index" -le "$base_line_no" ]; do
+      base_line=$(echo "$base_array" | sed -n "${index}p")
+      [ -z "$base_line" ] && break
+      [ "${base_line%::*}" = "$key" ] && count=$((count+1))
+      index=$((index+1))
+    done
+    echo "$count"
+  }
+
+  findLinesWithKey() {
+    local key="$1"
+    local key_occurence_count="$2"
+    local base_line="$3"
+  
+    local line_no=0
+    local merge_idx=0
+    local found=0
+  
+    while :; do
+      line_no=$((line_no+1))
+      line=$(echo "$merge_array" | sed -n "${line_no}p")
+      [ -z "$line" ] && break
+      [ "${line%::*}" != "$key" ] && continue
+      merge_idx=$((merge_idx+1))
+      [ "$merge_idx" -lt "$key_occurence_count" ] && continue
+      echo "$line"
+      # printf "%s\n" "$line_no" >> "$merged_line_nums"
+      merged_line_nums="$(printf "%s\n" ${merged_line_nums} ${line_no})"
+      found=1
+      break
+    done
+
+    [ "$found" -eq 0 ] && echo "$base_line"
+  }
+
+  merged_line_nums=""
+  merged_line_nums_tmp=$(mktemp)
+  > "$merged_line_nums_tmp"
+  trap "rm -f $merged_line_nums_tmp" EXIT
+  
+  base_line_no=1
+  printf "%s\n" "$base_array" | while read -r base_line; do
+    base_key=${base_line%::*}
+    base_val=${base_line#*::}
+
+    # Count how many times this key has appeared so far in base
+    key_occurence_count=$(countKeyOccurence "$base_key" "$base_line_no")
+    
+    # Now find the corresponding Nth occurrence in merge
+    findLinesWithKey "$base_key" "$key_occurence_count" "$base_line"
+    printf "%s\n" "$merged_line_nums" >> "$merged_line_nums_tmp"
+      
+    base_line_no=$((base_line_no+1))
+  done
+
+  # Print remaining not used merge entries
+  merge_line_no=0
+  while :; do
+    merge_line_no=$((merge_line_no+1))
+    grep -qx "$merge_line_no" "$merged_line_nums_tmp" && continue
+    merge_line=$(echo "$merge_array" | sed -n "${merge_line_no}p")
+    [ -z "$merge_line" ] && break
+    echo "$merge_line"
+  done
+)
+
+
