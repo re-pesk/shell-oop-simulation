@@ -9,9 +9,9 @@ test_printVarContent () {
   # Print content of variable
   local label="$1"
   local content="$2"
-  echo "$label =>"
-  echo "'$content'"
-  echo
+  echo "$label =>" >&2
+  echo "'$content'" >&2
+  echo >&2
 }
 
 test_assert () (
@@ -19,157 +19,161 @@ test_assert () (
   local result="$2"
   local expected="$3"
   [ "$result" = "$expected" ] && return 0 
-  echo "Error in '$1'! Result\n'$2'\n!=\n'$3'!\n" >&2
+  echo "Error in '$function_name'! Result\n'$result'\n!=\n'$expected'!\n" >&2
   return 1
 )
 
-test_initSubstitutionString1 () {
-  # substitution of associative array
-  echo "5::true
-10::true
-15::true and false
-15::fifteen"
+test_createArray1 () {
+  # Initialize the associative array file if it does not exist
+  local expected="5::true${nl}10::true${nl}15::true and false${nl}15::fifteen"
+  local result="$(createArray "5::true" "10::true" "15::true and false" "15::fifteen")"
+  test_assert 'test_createArray 1' "$result" "$expected"
 }
 
-test_printSubstitutionString1 () {
-  # Print content of variable
-  test_printVarContent "printSubstitutionString1 =>" "$(test_initSubstitutionString1)"
-  echo
+test_createArray2 () {
+  # Initialize the associative array file if it does not exist
+  local expected="5::true${nl}10::true${nl}15::true and false${nl}15::fifteen"
+  local result="$(createArray "5::true${nl}10::true${nl}15::true and false${nl}15::fifteen")"
+  test_assert 'test_createArray 2' "$result" "$expected"
 }
 
-test_iterateOnSubstitutionString1 () {
-  # iterating on substitution_string1
-  local substitution_string1="$(test_initSubstitutionString1)"
+test_iterateArray1 () {
+  local array_string="$(createArray "5::true" "10::true" "15::true and false" "15::fifteen")"
   local expected="[5]=true${nl}[10]=true${nl}[15]=true and false${nl}[15]=fifteen"
-  local result=$(echo "$substitution_string1" | while read -r item; do
+  local result=$(printf '%s\n' "$array_string" |  while read -r item; do
     echo "[${item%::*}]=${item#*::}"
   done)
-  test_assert 'test_iterateOnSubstitutionString1' "$result" "$expected"
+  test_assert 'test_iterateArray1' "$result" "$expected"
 }
 
-# get value from substitution_string1
-test_getValueByKey1 () {
-  local substitution_string1=$(test_initSubstitutionString1)
+test_iterateArray2 () {
+  local array_string="$(createArray "20::true" "25::true and true" "Good evening::true")"
+  local expected="[20]=true${nl}[25]=true and true${nl}[Good evening]=true"
+  local result=$(printf '%s\n' "$array_string" |  while read -r item; do
+    echo "[${item%::*}]=${item#*::}"
+  done)
+  test_assert 'test_iterateArray2' "$result" "$expected"
+}
+
+# Get values by key
+test_getValuesByKeys1 () {
+  local array_string="$(createArray "5::true" "10::true" "15::true and false" "15::fifteen")"
   local expected="true"
-  local result="$(getValueByKey "$substitution_string1" 5)"
-  test_assert 'test_getValueByKey' "$result" "$expected"
+  local result="$(getValuesByKeys "$array_string" 5)"
+  test_assert 'test_getValuesByKeys 1' "$result" "$expected"
 }
 
-test_getValueByKey2 () {
-  local substitution_string1=$(test_initSubstitutionString1)
+# Get values by key
+test_getValuesByKeys2 () {
+  local array_string="$(createArray "5::true" "10::true" "15::true and false" "15::fifteen")"
   local expected="true and false${nl}fifteen"
-  local result="$(getValueByKey "$substitution_string1" 15)"
-  test_assert 'test_getValueByKey' "$result" "$expected"
+  local result="$(getValuesByKeys "$array_string" 15)"
+  test_assert 'test_getValuesByKeys 2' "$result" "$expected"
 }
 
-# get value from substitution_string1
-test_getIndexByKey1 () {
-  local substitution_string1=$(test_initSubstitutionString1)
+# Get value from array string by key
+test_getIndexesByKeys1 () {
+  local array_string="$(createArray "5::true" "10::true" "15::true and false" "15::fifteen")"
   local expected="1"
-  local result="$(getIndexByKey "$substitution_string1" 5)"
-  test_assert 'test_getIndexByKey' "$result" "$expected"
+  local result="$(getIndexesByKeys "$array_string" 5)"
+  test_assert 'test_getIndexesByKeys 1' "$result" "$expected"
 }
 
-test_getIndexByKey2 () {
-  local substitution_string1=$(test_initSubstitutionString1)
+# Get value from array string by key
+test_getIndexesByKeys2 () {
+  local array_string="$(createArray "5::true" "10::true" "15::true and false" "15::fifteen")"
   local expected="3${nl}4"
-  local result="$(getIndexByKey "$substitution_string1" 15)"
-  test_assert 'test_getIndexByKey' "$result" "$expected"
+  local result="$(getIndexesByKeys "$array_string" 15)"
+  test_assert 'test_getIndexesByKeys 2' "$result" "$expected"
 }
 
-test_setEntry () {
-  local substitution_string1=$(test_initSubstitutionString1)
+test_getEntriesByKeys1 (){
+  local array_string="$(createArray "5::false" "10::true" "15::true and false" "15::fifteen")"
+  local expected="5::false${nl}15::true and false${nl}15::fifteen"
+  local result="$(getEntriesByKeys "$array_string" 5 15)"
+  test_assert 'test_getEntriesByKeys 1' "$result" "$expected"
+}
 
+test_appendEntries1 () {
+  local array_string1="$(createArray "5::true" "10::true" "15::true and false" "15::fifteen")"
+  local array_string2="$(createArray "20::true" "15::true and true" "15::fifty" "15::one hundred and fifty" "Good evening::true")"
+  local expected="5::true${nl}10::true${nl}15::true and false${nl}15::fifteen
+20::true${nl}15::true and true${nl}15::fifty${nl}15::one hundred and fifty${nl}Good evening::true"
+  local result="$(appendEntries "$array_string1" "$array_string2")"
+  test_assert 'test_appendEntries 1' "$result" "$expected"
+}
+
+test_removeEntriesByKeys1 () {
+  local array_string="$(createArray "5::true" "10::true" "15::true and false" "15::fifteen")"
+  local expected="10::true${nl}15::true and false${nl}15::fifteen"
+  local result="$(removeEntriesByKeys "$array_string" 5)"
+  test_assert 'test_removeEntries 1' "$result" "$expected"
+}
+
+test_removeEntriesByKeys2 () {
+  local array_string="$(createArray "5::true" "10::true" "15::true and false" "15::fifteen")"
+  local expected="5::true${nl}10::true"
+  local result="$(removeEntriesByKeys "$array_string" 15)"
+  test_assert 'test_removeEntries 1' "$result" "$expected"
+}
+
+test_setEntries1 () {
+  local array_string="$(createArray "5::true" "10::true" "15::true and false" "15::fifteen")"
   local expected="5::false${nl}10::true${nl}15::true and false${nl}15::fifteen"
-  local result=$(setEntry "$substitution_string1" "5::false")
-  test_assert 'test_setEntry' "$result" "$expected" || return 1
-  
+  local result=$(setEntries "$array_string" "5::false")
+  test_assert 'test_setEntries 1' "$result" "$expected"
+}
+
+test_setEntries2 () {
+  local array_string="$(createArray "5::false" "10::true" "15::true and false" "15::fifteen")"
   local expected="5::false${nl}10::true${nl}15::true and false${nl}15::fifteen${nl}25::false and false"
-  result=$(setEntry "$result" "25::false and false")
-  test_assert 'test_setEntry' "$result" "$expected" || return 1
-  return 0
+  local result=$(setEntries "$array_string" "25::false and false")
+  test_assert 'test_setEntries 2' "$result" "$expected"
 }
-
-#init second substitution string
-test_initSubstitutionString2 () {
-  # Second substitution string
-  echo "20::true
-25::true and true
-Good evening::true"
-}
-
-test_printSubstitutionString2 () {
-  # Print content of variable
-  test_printVarContent "printSubstitutionString2" "$(test_initSubstitutionString2)"
-  echo
-}
-
-test_iterateOnSubstitutionString2 () {
-  # iterating on substitution_string2
-  local substitution_string2="$(test_initSubstitutionString2)"
-  local expected="[20]=true
-[25]=true and true
-[Good evening]=true"
-  local result=$(echo "$substitution_string2" | while read -r item; do
-    echo "[${item%::*}]=${item#*::}"
-  done)
-  test_assert 'test_iterateOnSubstitutionString1' "$result" "$expected"
-}
-
-test_initSubstitutionString3 () {
-  # substitution of associative array
-  echo "20::true
-15::true and true
-15::penkiasdešimt
-15::šimtas penkiasdešimt
-Good evening::true"
-}
-
 
 # merge two substitution strings of associative array
-test_mergeArrays () {
-  local substitution_string1="$(test_initSubstitutionString1)"
-  local substitution_string3="$(test_initSubstitutionString3)"
-  local expected='5::true
-10::true
-15::true and true
-15::penkiasdešimt
-20::true
-15::šimtas penkiasdešimt
-Good evening::true'
-  local result="$(mergeArrays "$substitution_string1" "$substitution_string3")"
-  test_assert 'test_mergeArrays' "$result" "$expected"
+test_setEntries3 () {
+  local array_string1="$(createArray "5::true" "10::true" "15::true and false" "15::fifteen")"
+  local array_string3="$(createArray "20::true" "15::true and true" "15::fifty" "15::one hundred and fifty" "Good evening::true")"
+  local expected="5::true${nl}10::true${nl}15::true and true${nl}15::fifty${nl}20::true${nl}15::one hundred and fifty${nl}Good evening::true"
+  local result="$(setEntries "$array_string1" "$array_string3")"
+  test_assert 'test_setEntries 3' "$result" "$expected"
 }
 
-test_iterateOnMergedSubstitutionString () {
-  merged_substitution_string="$(mergeArrays "$(test_initSubstitutionString1)" "$(test_initSubstitutionString3)")"
-  local expected='[5]=true
-[10]=true
-[15]=true and true
-[15]=penkiasdešimt
-[20]=true
-[15]=šimtas penkiasdešimt
-[Good evening]=true'
-  local result=$(echo "$merged_substitution_string" | while read -r item; do
-    echo "[${item%::*}]=${item#*::}"
-  done)
-  test_assert 'test_iterateOnMergedSubstitutionString' "$result" "$expected"
+# set pairs in associative array
+test_setPairs1 () {
+  local array_string="$(createArray "5::true" "10::true" "15::true and false" "15::fifteen")"
+  local expected="5::false${nl}10::true${nl}15::true and false${nl}15::fifteen"
+  local result="$(setPairs "$array_string" "5" "false")"
+  test_assert 'test_setPairs 1' "$result" "$expected"
 }
 
-# test_printVarContent substitution_string1 "$(test_initSubstitutionString1)"
-# test_initSubstitutionString1
+# set pairs in associative array
+test_setPairs2 () {
+  local array_string="$(createArray "5::true" "10::true" "15::true and false" "15::fifteen")"
+  local expected="5::true${nl}10::true${nl}15::true and true${nl}15::fifty${nl}20::true${nl}15::one hundred and fifty${nl}Good evening::true"
+  local result="$(setPairs "$array_string" "20" "true" "15" "true and true" "15" "fifty" "15" "one hundred and fifty" "Good evening" "true")"
+  test_assert 'test_setPairs 2' "$result" "$expected"
+}
 
-# test_printSubstitutionString1
 test_run () {
-  test_iterateOnSubstitutionString1 && echo 0 || echo 1
-  test_getValueByKey1 && echo 0 || echo 1
-  test_getValueByKey2 && echo 0 || echo 1
-  test_getIndexByKey1 && echo 0 || echo 1
-  test_getIndexByKey2 && echo 0 || echo 1
-  test_setEntry && echo 0 || echo 1
-  test_iterateOnSubstitutionString2 && echo 0 || echo 1
-  test_mergeArrays && echo 0 || echo 1
-  test_iterateOnMergedSubstitutionString && echo 0 || echo 1
+  test_createArray1 && echo 0 || echo 1
+  test_createArray2 && echo 0 || echo 1
+  test_iterateArray1 && echo 0 || echo 1
+  test_iterateArray2 && echo 0 || echo 1
+  test_getValuesByKeys1 && echo 0 || echo 1
+  test_getValuesByKeys2 && echo 0 || echo 1
+  test_getIndexesByKeys1 && echo 0 || echo 1
+  test_getIndexesByKeys2 && echo 0 || echo 1
+  test_getEntriesByKeys1 && echo 0 || echo 1
+  test_removeEntriesByKeys1 && echo 0 || echo 1
+  test_removeEntriesByKeys2 && echo 0 || echo 1
+  test_setEntries1 && echo 0 || echo 1
+  test_setEntries2 && echo 0 || echo 1
+  test_setEntries3 && echo 0 || echo 1
+  test_appendEntries1 && echo 0 || echo 1
+  test_setPairs1 && echo 0 || echo 1
+  test_setPairs2 && echo 0 || echo 1
 }
 
 test_report () {
@@ -182,6 +186,6 @@ test_report () {
   echo Testing results: total: ${no}, passed: $((no-sum)), failed: $sum.
 }
 
-# test_report
+test_report
 
 
