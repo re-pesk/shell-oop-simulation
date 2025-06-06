@@ -1,6 +1,6 @@
 #!/usr/bin/env -S dash
 
-. ./_assoc_array.dash
+. ./_multimap.dash
 
 nl="
 "
