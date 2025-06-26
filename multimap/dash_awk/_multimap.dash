@@ -1,134 +1,376 @@
 #!/usr/bin/env -S dash
 
-createArray() {
-  # Initialize the associative array file if it does not exist
-  printf '%s\n' "$@" | while read -r arg; do
-    case "$arg" in
-      ( *::* )
-        echo "$arg"
-        ;;
-      ( * )
-        echo "Unknown argument: $arg" >&2
-        return 1
-        ;;
+# Error message for empty multimap string
+mm_errorEmptyMapArg () {
+  echo "Error! No multimap string provided!" >&2
+  exit 1
+}
+
+# Error message for unknown option
+mm_errorUnknownOption () {
+  echo "Unknown option: -${1}" >&2
+}
+
+# Check if indexes are valid, if true, return indexes, otherwise exit with error
+mm_checkIndexes () {
+  local last_index=0
+
+  # Parse options
+  while getopts ':l:' opt; do
+    case $opt in
+      (l) [ -n "${OPTARG}" ] && local last_index="${OPTARG}";;
+      (\?) mm_errorUnknownOption "${OPTARG}";;
     esac
   done
+  shift "$((OPTIND - 1))"
+
+  # Check for index validity, replace negative indexes with positive ones, sort them
+  printf '%s\n' $@ | awk -v last_index="$last_index" '
+    BEGIN { error = 0 }
+    ! /^-?[1-9][0-9]*$/ { printf "Error! Index \x27%s\x27 is not allowed!\n", $0 > "/dev/stderr"; error = 1; exit 1 }
+    {
+      if ($0 < 0) { $0 = last_index + $0 + 1 }
+      if ($0 <= 0) {
+        printf "Error! Index \x27%s\x27 is not allowed!\n", $0 > "/dev/stderr"
+        error = 1; exit 1
+      }
+      if ($0 in indexes) next;
+      indexes[$0] = 1
+      indexesAsValues[length(indexesAsValues)] = $0 + 0
+    }
+    END { if (error < 1) for (i = 0; i < length(indexesAsValues); i++) print indexesAsValues[i] }
+  '
 }
 
-# function to get value from array string by key
-getValuesByKeys() (
-  local array_string="$1"
-  if [ -z "$array_string" ]; then
-    echo "No array string provided" >&2
-    return 1
-  fi
-  shift
-  if [ -z "$1" ]; then
-    echo "No key provided to get entry from associative array" >&2
-    return 1
-  fi
-  printf '%s\n' "$array_string" | while read -r entry; do
-    local entry_key="${entry%::*}"
-    printf '%s\n' "$@" | while read -r key; do
-      if [ "$entry_key" = "${key}" ]; then
-        echo "${entry#*::}"
-        continue
-      fi
-    done
+# Check if arguments are valid, if true, return arguments, otherwise exit with error
+mm_checkArguments() {
+  # Check if the arguments are valid
+  while getopts ':i:' opt; do
+    case $opt in
+      (i) [ -n "${OPTARG}" ] && local input_type="${OPTARG}";;
+      (\?) mm_errorUnknownOption "${OPTARG}";;
+    esac
+  done
+
+  shift "$((OPTIND - 1))"
+  [ $# -eq 0 ] && echo "No arguments provided!" >&2 && exit 1
+
+  printf '%s\n' "$@" | awk -v input_type="$input_type" '
+    BEGIN {
+      patterns[entry] = "^([1-9][0-9]*::|(?:\\:{1,2}|[^:]:|[^:])*::)((?:[^:\n]|\\:|[^:\n]:)+)$"
+      patterns[element] = "^((\\:|[^:]:|[^:])+::)?([^:\n]|\\:|[^:\n]:)+$"
+      patterns[key] = "^([1-9][0-9]*|(\\:|[^:]:|[^:])+)$"
+      patterns[value] = "^([^:\n]|\\:|[^:\n]:)+$"
+    }
+    { gsub(/^[ \t]+|[ \t]+$/, "", $0) }
+    /^[ \t]*$/ { next }
+    # { printf "Argument \x27%s\x27\n", $0 > "/dev/stderr" }
+    {
+      if ($0 != "" && $0 ~ patterns[input_type] && $0 !~ /\\::/) {
+        args[length(args)] = $0
+        next
+      }
+      printf "Error! Argument \x27%s\x27 is not allowed!\n", $0 > "/dev/stderr"
+      error = 1
+      exit 1
+    }
+    END { if (error < 1) for (i = 0; i < length(args); i++) print args[i] }
+  '
+}
+
+mm_createMap() (
+  # Initialize the multimap file if it does not exist, using awk
+
+  printf '%s\n' "$(mm_checkArguments -i element "$@")" | awk -F'::' '
+    BEGIN { OFS = "::" }
+    { gsub(/^[ ]+|[ ]+$/, "", $0) }
+    /^[ \t]*$/ { next }
+    { gsub(/^[ ]+|[ ]+$/, "", $0) }
+    ! /::/ { print "_::" $0; next }
+    /^([1-9][0-9]*)?::/ { $1 = "_" }
+    { print $0 }
+  '
+)
+
+mm_lastIndex() (
+  # Count items in the multimap
+  local m="" # multimap string
+
+  # Parse options
+  while getopts ':m:' opt; do
+    case $opt in
+      (m) [ -n "${OPTARG}" ] && local $opt="${OPTARG}";;
+      (\?) mm_errorUnknownOption "${OPTARG}";;
+    esac
+  done
+  [ -z "${m}" ] && mm_errorEmptyMapArg
+  shift "$((OPTIND - 1))"
+
+  echo "$m" | awk 'END{print NR}'
+)
+
+mm_lastNumKey() (
+  # Count items with numeric keys (where key is empty) using awk
+  local m="" # multimap string
+
+  # Parse options
+  while getopts ':m:' opt; do
+    case $opt in
+      (m) [ -n "${OPTARG}" ] && local $opt="${OPTARG}";;
+      (\?) mm_errorUnknownOption "${OPTARG}";;
+    esac
+  done
+  [ -z "${m}" ] && mm_errorEmptyMapArg
+  shift "$((OPTIND - 1))"
+
+  echo "$m" | awk -F'::' '
+    { if ($1 == "_") count++ }
+    END { print count }
+  '
+)
+
+# There are these types of items:
+# * element - original unit of list:
+#       - simple value which can be accessed by numeric key which depends from order in multimap
+#       - pair of key and value separated by "=" which can be accessed by key;
+# * entry - pair of key and value, separated by "=";
+# * value - part of entry to the right of separator;
+# * key - part of entry to the left of separator.
+mm_items() (
+  local o="value" # output type
+  local m="" # multimap string
+  # Parse options
+  while getopts ':m:o:' opt; do
+    case $opt in
+      (m|o) [ -n "${OPTARG}" ] && local $opt="${OPTARG}";;
+      (\?) mm_errorUnknownOption "${OPTARG}";;
+    esac
+  done
+  [ -z "${m}" ] && mm_errorEmptyMapArg
+  shift "$((OPTIND - 1))"
+
+  echo "$m" | awk -F'::' -v output_type="$o" '
+    { key = $1; value = $2 }
+    output_type == "value" { print value; next }
+    output_type == "element" {
+      if (key == "_") { print value; next }
+      print $0; next
+    }
+    key == "_" { count++; key = count }
+    output_type == "key" { print key; next }
+    { print key "::" value }
+  '
+)
+
+mm_indexesOf() (
+  # Get indexes of items in the multimap
+  local i="value" # input type
+  local m="" # multimap string
+
+  # Parse options
+  while getopts ':i:m:' opt; do
+    case $opt in
+      (i|m) [ -n "${OPTARG}" ] && local $opt="${OPTARG}";;
+      (\?) mm_errorUnknownOption "${OPTARG}";;
+    esac
+  done
+  [ -z "${m}" ] && mm_errorEmptyMapArg
+  shift "$((OPTIND - 1))"
+
+  # Items of input type
+  local items="$(mm_items -o "$i" -m "$m")"
+  # Get indexes of items in the multimap
+  indexes="$(printf '%s\n' "$@" | awk -v items="$items" '
+    BEGIN { items_no = split(items, items_array, "\n") }
+    /^[ ]*$/ { next }
+    {
+      gsub(/^[ ]+|[ ]+$/, "", $0)
+      result = ""
+      for (i =1; i <= items_no; i++) {
+        if (items_array[i] == $0) { result = result " " i }
+      }
+      if (!(result == "")) { sub(/^[ ]+/, "", result ); print result }
+    }
+  ')"
+
+  printf '%s\n' "$indexes"
+)
+
+mm_itemsAt() (
+  # Get items in the multimap by indexes
+  local o="entry" # output type
+  local m="" # multimap string
+
+  # Parse options
+  while getopts ':m:o:' opt; do
+    case $opt in
+      (m|o) [ -n "${OPTARG}" ] && local $opt="${OPTARG}";;
+      (\?) mm_errorUnknownOption "${OPTARG}";;
+    esac
+  done
+  [ -z "${m}" ] && mm_errorEmptyMapArg
+  shift "$((OPTIND - 1))"
+
+  local last_index="$(mm_lastIndex -m "$m")"
+  local indexes="$(mm_checkIndexes -l "$last_index" "$@")"
+  # echo indexes: "$indexes" >&2
+  local items="$(mm_items -o "$o" -m "$m")"
+
+  printf '%s\n': "$indexes" | while read -r index; do
+    printf '%s\n': "$items" | awk "NR==$index"
   done
 )
 
-getIndexesByKeys() (
-  local array_string="$1"
-  if [ -z "$array_string" ]; then
-    echo "No array string provided" >&2
-    return 1
-  fi
-  shift
-  if [ -z "$1" ]; then
-    echo "No key provided to get entry from associative array" >&2
-    return 1
-  fi
-  local index=0
-  printf '%s\n' "$array_string" | while read -r entry; do
-    local entry_key="${entry%::*}"
-    index=$(( index + 1 ))
-    printf '%s\n' "$@" | while read -r key; do
-      if [ "$entry_key" = "${key}" ]; then
-        echo "${index}"
-        continue
-      fi
-    done
+# Get indexes of items in the multimap
+mm_get() (
+  local i="key" # default input type
+  local o="value" # default output type
+  local m="" # multimap string
+
+  # Parse options
+  while getopts ':i:m:o:' opt; do
+    case $opt in
+      (i|m|o) [ -n "${OPTARG}" ] && local $opt="${OPTARG}";;
+      (\?) mm_errorUnknownOption "${OPTARG}";;
+    esac
   done
+  [ -z "${m}" ] && mm_errorEmptyMapArg
+  shift "$((OPTIND - 1))"
+
+  indexes="$(mm_indexesOf -i "$i" -m "$m" "$@")"
+  mm_itemsAt -o "$o" -m "$m" "$indexes"
 )
 
-getEntriesByKeys() (
-  local array_string="$1"
-  if [ -z "$array_string" ]; then
-    echo "No array string provided" >&2
-    return 1
-  fi
-  shift
-  if [ -z "$1" ]; then
-    echo "No key provided to get entry from associative array" >&2
-    return 1
-  fi
-  printf '%s\n' "$array_string" | while read -r entry; do
-    local entry_key="${entry%::*}"
-    printf '%s\n' "$@" | while read -r key; do
-      if [ "$entry_key" = "${key}" ]; then
-        echo "${entry}"
-        continue
-      fi
-    done
+mm_append() (
+  local m="" # multimap string
+
+  # Parse options
+  while getopts ':m:' opt; do
+    case $opt in
+      (i|m|o) [ -n "${OPTARG}" ] && local $opt="${OPTARG}";;
+      (\?) mm_errorUnknownOption "${OPTARG}";;
+    esac
   done
+  shift "$((OPTIND - 1))"
+
+  local arrayToAppend="$(mm_createMap "$@")"
+
+  if [ -z "$m" ]; then
+    echo "$arrayToAppend"
+    return
+  fi
+
+  if [ -z "$arrayToAppend" ]; then
+    echo "$m"
+    return
+  fi
+
+  echo "$m"
+  echo "$arrayToAppend"
 )
 
-removeEntriesByKeys() {
-  local array_string="$1"
-  if [ -z "$array_string" ]; then
-    echo "No array string provided" >&2
-    return 1
-  fi
-  shift
-  if [ -z "$1" ]; then
-    echo "No key provided to get entry from associative array" >&2
-    return 1
-  fi
-  printf '%s\n' "$array_string" | while read -r entry; do
-    local entry_key="${entry%::*}"
-    printf '%s\n' "$@" | while read -r key; do
-      if [ "$entry_key" != "${key}" ]; then
-        echo "${entry}"
-        continue
-      fi
-    done
+# function to get value from multimap string by key
+mm_getValuesByKeys() (
+  mm_get -i "key" -o value "$@"
+)
+
+mm_getIndexesByKeys() (
+  mm_indexesOf -i "key" "$@"
+)
+
+mm_getEntriesByKeys() (
+  mm_get -i "key" -o "entry" "$@"
+)
+
+mm_remainingSet () (
+  local last_index="0" # maximum index to use
+
+  # Parse options
+  while getopts ':l:' opt; do
+    case $opt in
+      (l) [ -n "${OPTARG}" ] && local last_index="${OPTARG}";;
+      (\?) mm_errorUnknownOption "${OPTARG}";;
+    esac
   done
+  shift "$((OPTIND - 1))"
+
+  indexes="$(mm_checkIndexes -l "$last_index" -- "$@")"
+  awk -v indexes="$indexes" -v last_index="$last_index" '
+    BEGIN {
+      split(indexes, indexesAsValues, "[ \n]")
+      for (i in indexesAsValues) indexesAsKeys[indexesAsValues[i]] = ""
+      for (i = 1; i <= last_index; i++) { if (!(i in indexesAsKeys)) print i }
+      exit
+    }
+  '
+)
+
+mm_remainingIndexes() (
+  # Get remaining indexes of items in the multimap
+  local m="" # multimap string
+
+  # Parse options
+  while getopts ':m:' opt; do
+    case $opt in
+      (m) [ -n "${OPTARG}" ] && local $opt="${OPTARG}";;
+      (\?) mm_errorUnknownOption "${OPTARG}";;
+    esac
+  done
+  [ -z "${m}" ] && mm_errorEmptyMapArg
+  shift "$((OPTIND - 1))"
+
+  local last_index="$(mm_lastIndex -m "$m")"
+  local indexes="$(mm_checkIndexes -l "$last_index" -- "$@")"
+  mm_remainingSet -l "$last_index" -- "$indexes"
+)
+
+mm_removeAt() (
+  # Get remaining indexes of items in the multimap
+  local m="" # multimap string
+  local o="value" # output type
+
+  # Parse options
+  while getopts ':m:o:' opt; do
+    case $opt in
+      (m|o) [ -n "${OPTARG}" ] && local $opt="${OPTARG}";;
+      (\?) mm_errorUnknownOption "${OPTARG}";;
+    esac
+  done
+  [ -z "${m}" ] && mm_errorEmptyMapArg
+  shift "$((OPTIND - 1))"
+
+  local indexes="$(mm_remainingIndexes -m "$m" -- "$@")"
+  mm_itemsAt -o "$o" -m "$m" -- "$indexes"
+)
+
+mm_remove() {
+  local i="key" # input type
+  local m="" # multimap string
+  local o="value" # output type
+
+    # Parse options
+  while getopts ':i:m:o:' opt; do
+    case $opt in
+      (i|m|o) [ -n "${OPTARG}" ] && local $opt="${OPTARG}";;
+      (\?) mm_errorUnknownOption "${OPTARG}";;
+    esac
+  done
+  [ -z "${m}" ] && mm_errorEmptyMapArg
+  shift "$((OPTIND - 1))"
+
+  local indexes="$(mm_indexesOf -m "$m" -i "$i" -- "$@")"
+  mm_removeAt -m "$m" -o "$o" -- "$indexes"
 }
 
-_removeEntriesByKeys() {
-  # Remove an entry from the associative array file
-  local array_string="$1"
-  local key="$2"
-  if [ ! -f "$arr_name" ]; then
-    echo "Array file does not exist: $arr_name" >&2
-    return 1
-  fi
-  local tmp_file=$(mktemp)
-  trap "rm -f $tmp_file" EXIT
-  grep -v "^$key::" "$arr_name" > "$tmp_file"
-  mv "$tmp_file" "$arr_name"
-}
-
-setEntry() (
-  local array_string="$1"
-  if [ -z "$array_string" ]; then
-    echo "No array string provided" >&2
+mm_setEntry() (
+  local map="$1"
+  if [ -z "$map" ]; then
+    echo "No multimap string provided" >&2
     return 1
   fi
   local new_entry="$2"
   if [ -z "$new_entry" ]; then
-    echo "No entry provided to set in associative array" >&2
+    echo "No entry provided to set in multimap" >&2
     return 1
   fi
   local new_key=${new_entry%::*}
@@ -137,12 +379,12 @@ setEntry() (
     return 1
   fi
   local array_tmp=$(mktemp)
-  echo "$array_string" > "$array_tmp"
+  echo "$map" > "$array_tmp"
   trap "rm -f $array_tmp" EXIT
   local replaced="false"
   while read -r entry; do
     local key=${entry%::*}
-    if [ "$key" != "$new_key" ]; then 
+    if [ "$key" != "$new_key" ]; then
       echo "${entry}"
       continue
     fi
@@ -155,7 +397,7 @@ setEntry() (
   fi
 )
 
-appendEntries() {
+mm_appendEntries() {
   local base_array="$1"
   local merge_array="$2"
 
@@ -169,11 +411,11 @@ appendEntries() {
     return
   fi
 
-  echo "$base_array" 
+  echo "$base_array"
   echo "$merge_array"
 }
 
-setEntries() (
+mm_setEntries() (
 
   base_array="$1"
   merge_array="$2"
@@ -197,11 +439,11 @@ setEntries() (
     local key="$1"
     local key_occurence_count="$2"
     local base_line="$3"
-  
+
     local line_no=0
     local merge_idx=0
     local found=0
-  
+
     while :; do
       line_no=$((line_no+1))
       line=$(echo "$merge_array" | sed -n "${line_no}p")
@@ -223,7 +465,7 @@ setEntries() (
   merged_line_nums_tmp=$(mktemp)
   > "$merged_line_nums_tmp"
   trap "rm -f $merged_line_nums_tmp" EXIT
-  
+
   base_line_no=1
   printf "%s\n" "$base_array" | while read -r base_line; do
     base_key=${base_line%::*}
@@ -231,11 +473,11 @@ setEntries() (
 
     # Count how many times this key has appeared so far in base
     key_occurence_count=$(countKeyOccurence "$base_key" "$base_line_no")
-    
+
     # Now find the corresponding Nth occurrence in merge
     findLinesWithKey "$base_key" "$key_occurence_count" "$base_line"
     printf "%s\n" "$merged_line_nums" >> "$merged_line_nums_tmp"
-      
+
     base_line_no=$((base_line_no+1))
   done
 
@@ -250,7 +492,7 @@ setEntries() (
   done
 )
 
-makePairs () {
+mm_makePairs () {
   if [ $# -lt 2 ]; then
     echo "At least one key-value pair must be provided" >&2
     return 1
@@ -266,21 +508,21 @@ makePairs () {
   done
 }
 
-setPairs() {
-  local array_string="$1"
-  if [ -z "$array_string" ]; then
-    echo "No array string provided" >&2
+mm_setPairs() {
+  local map="$1"
+  if [ -z "$map" ]; then
+    echo "No multimap string provided" >&2
     return 1
   fi
   shift
   if [ $# -eq 0 ]; then
-    echo "No key-value pairs provided to set in associative array" >&2
+    echo "No key-value pairs provided to set in multimap" >&2
     return 1
   fi
-  local entries=$(makePairs "$@")
+  local entries=$(mm_makePairs "$@")
   if [ -z "$entries" ]; then
     echo "No valid key-value pairs provided" >&2
     return 1
   fi
-  setEntries "$array_string" "$entries"
+  mm_setEntries "$map" "$entries"
 }

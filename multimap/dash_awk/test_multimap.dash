@@ -18,162 +18,630 @@ test_assert () (
   local function_name="$1"
   local result="$2"
   local expected="$3"
-  [ "$result" = "$expected" ] && return 0 
-  echo "Error in '$function_name'! Result\n'$result'\n!=\n'$expected'!\n" >&2
+  [ "$result" = "$expected" ] && return 0
+  echo "Error in '$function_name'! Result\n'$result'\nis not equal to expected value\n'$expected'!\n" >&2
   return 1
 )
 
-test_createArray1 () {
-  # Initialize the associative array file if it does not exist
-  local expected="5::true${nl}10::true${nl}15::true and false${nl}15::fifteen"
-  local result="$(createArray "5::true" "10::true" "15::true and false" "15::fifteen")"
-  test_assert 'test_createArray 1' "$result" "$expected"
+test_mm_createMap1 () {
+  # Initialize the multimap file if it does not exist
+  local expected="_::news and articles${nl}tag::tech${nl}tag::ai${nl}category1::science${nl}_::simply text"
+  local result="$(mm_createMap "
+  news and articles
+
+  tag::tech
+  tag::ai
+    category1::science
+    ::simply text
+  "
+  )"
+  test_assert 'test_mm_createMap1' "$result" "$expected"
 }
 
-test_createArray2 () {
-  # Initialize the associative array file if it does not exist
-  local expected="5::true${nl}10::true${nl}15::true and false${nl}15::fifteen"
-  local result="$(createArray "5::true${nl}10::true${nl}15::true and false${nl}15::fifteen")"
-  test_assert 'test_createArray 2' "$result" "$expected"
+test_mm_createMap2 () {
+  # Initialize the multimap file if it does not exist
+  local expected="_::true${nl}_::true${nl}_::true and false${nl}number123::fifteen"
+  local result="$(mm_createMap true true "true and false" "number123::fifteen")"
+  test_assert 'test_mm_createMap2' "$result" "$expected"
 }
 
-test_iterateArray1 () {
-  local array_string="$(createArray "5::true" "10::true" "15::true and false" "15::fifteen")"
-  local expected="[5]=true${nl}[10]=true${nl}[15]=true and false${nl}[15]=fifteen"
-  local result=$(printf '%s\n' "$array_string" |  while read -r item; do
+test_mm_createMap3 () {
+  # Initialize the multimap file if it does not exist
+  local expected="_::true${nl}abc::true${nl}_::true and false${nl}number123::fifteen"
+  local result="$(mm_createMap "true${nl}abc::true${nl}true and false${nl}number123::fifteen")"
+  test_assert 'test_mm_createMap3' "$result" "$expected"
+}
+
+test_mm_iterateMap1 () {
+  local map="$(mm_createMap "5::true" "10::true" "15::true and false" "number123::fifteen")"
+  local expected="[_]=true${nl}[_]=true${nl}[_]=true and false${nl}[number123]=fifteen"
+  local result=$(printf '%s\n' "$map" |  while read -r item; do
     echo "[${item%::*}]=${item#*::}"
   done)
-  test_assert 'test_iterateArray1' "$result" "$expected"
+  test_assert 'test_mm_iterateMap 1' "$result" "$expected"
 }
 
-test_iterateArray2 () {
-  local array_string="$(createArray "20::true" "25::true and true" "Good evening::true")"
-  local expected="[20]=true${nl}[25]=true and true${nl}[Good evening]=true"
-  local result=$(printf '%s\n' "$array_string" |  while read -r item; do
+test_mm_iterateMap2 () {
+  local map="$(mm_createMap "20::true" "25::true and true" "Good evening::true")"
+  local expected="[_]=true${nl}[_]=true and true${nl}[Good evening]=true"
+  local result=$(printf '%s\n' "$map" |  while read -r item; do
     echo "[${item%::*}]=${item#*::}"
   done)
-  test_assert 'test_iterateArray2' "$result" "$expected"
+  test_assert 'test_mm_iterateMap 2' "$result" "$expected"
 }
 
-# Get values by key
-test_getValuesByKeys1 () {
-  local array_string="$(createArray "5::true" "10::true" "15::true and false" "15::fifteen")"
-  local expected="true"
-  local result="$(getValuesByKeys "$array_string" 5)"
-  test_assert 'test_getValuesByKeys 1' "$result" "$expected"
+test_mm_iterateMap3 () {
+  local map="$(mm_createMap "true${nl}abc::true${nl}true and false${nl}number123::fifteen")"
+  local expected="[_]=true${nl}[abc]=true${nl}[_]=true and false${nl}[number123]=fifteen"
+  local result=$(printf '%s\n' "$map" |  while read -r item; do
+    echo "[${item%::*}]=${item#*::}"
+  done)
+  test_assert 'test_mm_iterateMap 3' "$result" "$expected"
 }
 
-# Get values by key
-test_getValuesByKeys2 () {
-  local array_string="$(createArray "5::true" "10::true" "15::true and false" "15::fifteen")"
+test_mm_lastIndex () {
+  local map="$(mm_createMap true true "true and false" "number123::fifteen")"
+  local expected="4"
+  local result="$(mm_lastIndex -m "$map")"
+  test_assert 'test_mm_lastIndex' "$result" "$expected"
+}
+
+test_mm_lastNumKey () {
+  local map="$(mm_createMap true true "true and false" "number123::fifteen")"
+  local expected="3"
+  local result="$(mm_lastNumKey -m "$map")"
+  test_assert 'test_mm_lastNumKey' "$result" "$expected"
+}
+
+test_mm_checkIndexes1 () {
+  local expected="5${nl}1${nl}2${nl}7${nl}4"
+  local result="$(mm_checkIndexes -l 9 -- 5 5 1 2 -3 4)"
+  test_assert 'test_mm_checkIndexes1' "$result" "$expected"
+}
+
+test_mm_checkIndexes2 () {
+  local expected="5${nl}1${nl}2${nl}7${nl}4"
+  local result="$(mm_checkIndexes -l 9 -- "5 5 1 2 -3 4")"
+  test_assert 'test_mm_checkIndexes2' "$result" "$expected"
+}
+
+test_mm_checkIndexes3 () {
+  local expected="5${nl}1${nl}2${nl}7${nl}4"
+  local result="$(mm_checkIndexes -l 9 -- "5${nl}5" 1 2 "-3 4" )"
+  test_assert 'test_mm_checkIndexes3' "$result" "$expected"
+}
+
+test_mm_entries() {
+  local map="$(mm_createMap true true "true and false" "number123::fifteen")"
+  local expected="1::true${nl}2::true${nl}3::true and false${nl}number123::fifteen"
+  local result="$(mm_items -o entry -m "$map")"
+  test_assert 'test_mm_entries' "$result" "$expected"
+}
+
+test_mm_elements() {
+  local map="$(mm_createMap true true "true and false" "number123::fifteen")"
+  # echo "Map content: $map" >&2
+  local expected="true${nl}true${nl}true and false${nl}number123::fifteen"
+  local result="$(mm_items -o element -m "$map")"
+  test_assert 'test_mm_elements' "$result" "$expected"
+}
+
+test_mm_values() {
+  local map="$(mm_createMap true true "true and false" "number123::fifteen")"
+  local expected="true${nl}true${nl}true and false${nl}fifteen"
+  local result="$(mm_items -o value -m "$map")"
+  test_assert 'test_mm_entries' "$result" "$expected"
+}
+
+test_mm_keys() {
+  local map="$(mm_createMap true true "true and false" "number123::fifteen")"
+  local expected="1${nl}2${nl}3${nl}number123"
+  local result="$(mm_items -o key -m "$map")"
+  test_assert 'test_mm_entries' "$result" "$expected"
+}
+
+test_mm_indexesOfEntries1 () {
+  local map="$(mm_createMap "5::true" "abc::true" "15::true and false" "number123::fifteen")"
+  local expected_map="_::true${nl}abc::true${nl}_::true and false${nl}number123::fifteen"
+  test_assert 'test_mm_indexesOfEntries1 a' "$map" "$expected_map"
+  local expected="4${nl}3"
+  local result="$(mm_indexesOf -i entry -m "$map" "number123::fifteen" "2::true and false" )"
+  test_assert 'test_mm_indexesOfEntries1 b' "$result" "$expected"
+}
+
+test_mm_indexesOfEntries2 () {
+  local map="$(mm_createMap "5::true" "abc::true" "15::true and false" "abc::fifteen")"
+  local expected_map="_::true${nl}abc::true${nl}_::true and false${nl}abc::fifteen"
+  test_assert 'test_mm_indexesOfEntries2 a' "$map" "$expected_map"
+  local expected="4"
+  local result="$(mm_indexesOf -i entry -m "$map" "abc::fifteen")"
+  test_assert 'test_mm_indexesOfEntries2 b' "$result" "$expected"
+}
+
+test_mm_indexesOfEntries3 () {
+  local map="$(mm_createMap "5::true" "abc::true" "15::true and false" "abc::fifteen")"
+  local expected_map="_::true${nl}abc::true${nl}_::true and false${nl}abc::fifteen"
+  test_assert 'test_mm_indexesOfEntries3 a' "$map" "$expected_map"
+  local expected="3${nl}2${nl}4"
+  local result=$(mm_indexesOf -i entry -m "$map" "2::true and false" "abc::true" "abc::fifteen")
+  # echo "Result:" "$(printf '%s\n' $result | sort)" >&2
+  test_assert 'test_mm_indexesOfEntries3 b' "$result" "$expected"
+}
+
+test_mm_indexesOfElements1 () {
+  local map="$(mm_createMap "5::true" "abc::true" "15::true and false" "number123::fifteen")"
+  local expected_map="_::true${nl}abc::true${nl}_::true and false${nl}number123::fifteen"
+  test_assert 'test_mm_indexesOfElements1 a' "$map" "$expected_map"
+  local expected="4${nl}3"
+  local result="$(mm_indexesOf -i element -m "$map" "number123::fifteen" "true and false")"
+  test_assert 'test_mm_indexesOfElements1 b' "$result" "$expected"
+}
+
+test_mm_indexesOfElements2 () {
+  local map="$(mm_createMap "5::true" "abc::true" "15::true and false" "abc::fifteen")"
+  local expected_map="_::true${nl}abc::true${nl}_::true and false${nl}abc::fifteen"
+  test_assert 'test_mm_indexesOfElements2 a' "$map" "$expected_map"
+  local expected="4${nl}1"
+  local result="$(mm_indexesOf -i element -m "$map" "abc::fifteen" true)"
+  test_assert 'test_mm_indexesOfElements2 b' "$result" "$expected"
+}
+
+test_mm_indexesOfElements3 () {
+  local map="$(mm_createMap "5::true" "abc::true" "15::true" "abc::fifteen")"
+  local expected_map="_::true${nl}abc::true${nl}_::true${nl}abc::fifteen"
+  test_assert 'test_mm_indexesOfElements3 a' "$map" "$expected_map"
+  local expected="4${nl}1 3"
+  local result="$(mm_indexesOf -i element -m "$map" "abc::fifteen" "true")"
+  test_assert 'test_mm_indexesOfElements3 b' "$result" "$expected"
+}
+
+test_mm_indexesOfValues1 () {
+  local map="$(mm_createMap "5::true" "abc::true" "15::true and false" "number123::fifteen")"
+  local expected_map="_::true${nl}abc::true${nl}_::true and false${nl}number123::fifteen"
+  test_assert 'test_mm_indexesOfValues1 a' "$map" "$expected_map"
+  local expected="4${nl}3"
+  local result="$(mm_indexesOf -i value -m "$map" "fifteen" "true and false")"
+  test_assert 'test_mm_indexesOfValues1 b' "$result" "$expected"
+}
+
+test_mm_indexesOfValues2 () {
+  local map="$(mm_createMap "5::true" "abc::true" "15::true and false" "abc::fifteen")"
+  local expected_map="_::true${nl}abc::true${nl}_::true and false${nl}abc::fifteen"
+  test_assert 'test_mm_indexesOfValues2 a' "$map" "$expected_map"
+  local expected="4${nl}1 2"
+  local result="$(mm_indexesOf -i value -m "$map" "fifteen" true)"
+  test_assert 'test_mm_indexesOfValues2 b' "$result" "$expected"
+}
+
+test_mm_indexesOfValues3 () {
+  local map="$(mm_createMap "5::true" "abc::true" "15::true and false" "abc::fifteen")"
+  local expected_map="_::true${nl}abc::true${nl}_::true and false${nl}abc::fifteen"
+  test_assert 'test_mm_indexesOfValues3 a' "$map" "$expected_map"
+  local expected="4${nl}3${nl}1 2"
+  local result=$(mm_indexesOf -i value -m "$map" "fifteen" "true and false" "true")
+  # echo "Result:" "$(printf '%s\n' $result | sort)" >&2
+  test_assert 'test_mm_indexesOfValues3 b' "$result" "$expected"
+}
+
+test_mm_indexesOfKeys1 () {
+  local map="$(mm_createMap "5::true" "abc::true" "15::true and false" "number123::fifteen")"
+  local expected_map="_::true${nl}abc::true${nl}_::true and false${nl}number123::fifteen"
+  test_assert 'test_mm_indexesOfKeys1 a' "$map" "$expected_map"
+  local expected="4${nl}3"
+  local result="$(mm_indexesOf -i key -m "$map" "number123" 2)"
+  test_assert 'test_mm_indexesOfKeys1 b' "$result" "$expected"
+}
+
+test_mm_indexesOfKeys2 () {
+  local map="$(mm_createMap "5::true" "abc::true" "15::true and false" "abc::fifteen")"
+  local expected_map="_::true${nl}abc::true${nl}_::true and false${nl}abc::fifteen"
+  test_assert 'test_mm_indexesOfKeys2 a' "$map" "$expected_map"
+  local expected="2 4"
+  local result="$(mm_indexesOf -i key -m "$map" "abc")"
+  test_assert 'test_mm_indexesOfKeys2 b' "$result" "$expected"
+}
+
+test_mm_indexesOfKeys3 () {
+  local map="$(mm_createMap "5::true" "abc::true" "15::true and false" "abc::fifteen")"
+  local expected_map="_::true${nl}abc::true${nl}_::true and false${nl}abc::fifteen"
+  test_assert 'test_mm_indexesOfKeys3 a' "$map" "$expected_map"
+  local expected="2 4${nl}3"
+  local result=$(mm_indexesOf -i key -m "$map" "abc" 2)
+  # echo "Result:" "$(printf '%s\n' $result | sort)" >&2
+  test_assert 'test_mm_indexesOfKeys3 b' "$result" "$expected"
+}
+
+test_mm_entriesAt1 () {
+  local map="$(mm_createMap "5::true" "abc::true" "15::true and false" "number123::fifteen")"
+  local expected_map="_::true${nl}abc::true${nl}_::true and false${nl}number123::fifteen"
+  test_assert 'test_mm_entriesAt1 a' "$map" "$expected_map"
+  local expected="number123::fifteen${nl}2::true and false"
+  local result="$(mm_itemsAt -o entry -m "$map" 4 3)"
+  test_assert 'test_mm_entriesAt1 b' "$result" "$expected"
+}
+
+test_mm_entriesAt2 () {
+  local map="$(mm_createMap "5::true" "abc::true" "15::true and false" "number123::fifteen")"
+  local expected_map="_::true${nl}abc::true${nl}_::true and false${nl}number123::fifteen"
+  test_assert 'test_mm_entriesAt1 a' "$map" "$expected_map"
+  local expected="2::true and false${nl}abc::true${nl}number123::fifteen"
+  local result="$(mm_itemsAt -o entry -m "$map" "3${nl}2 4")"
+  test_assert 'test_mm_entriesAt1 b' "$result" "$expected"
+}
+
+test_mm_entriesAt3 () {
+  local map="$(mm_createMap "5::true" "abc::true" "15::true and false" "number123::fifteen")"
+  local expected_map="_::true${nl}abc::true${nl}_::true and false${nl}number123::fifteen"
+  test_assert 'test_mm_entriesAt3 a' "$map" "$expected_map"
+  local expected="number123::fifteen${nl}1::true${nl}2::true and false"
+  local result="$(mm_itemsAt -o entry -m "$map" 4 1 3)"
+  test_assert 'test_mm_entriesAt3 b' "$result" "$expected"
+}
+
+test_mm_elementsAt1() {
+  local map="$(mm_createMap "5::true" "abc::true" "15::true and false" "number123::fifteen")"
+  local expected_map="_::true${nl}abc::true${nl}_::true and false${nl}number123::fifteen"
+  test_assert 'test_mm_elementsAt1 a' "$map" "$expected_map"
+  local expected="true and false${nl}abc::true${nl}number123::fifteen"
+  local result="$(mm_itemsAt -o element -m "$map" "3${nl}2 4")"
+  test_assert 'test_mm_elementsAt1 b' "$result" "$expected"
+}
+
+test_mm_valuesAt1() {
+  local map="$(mm_createMap "5::true" "abc::true" "15::true and false" "number123::fifteen")"
+  local expected_map="_::true${nl}abc::true${nl}_::true and false${nl}number123::fifteen"
+  test_assert 'test_mm_valuesAt1 a' "$map" "$expected_map"
+  local expected="true and false${nl}true${nl}fifteen"
+  local result="$(mm_itemsAt -o value -m "$map" "3${nl}2 4")"
+  test_assert 'test_mm_valuesAt1 b' "$result" "$expected"
+}
+
+test_mm_keysAt1() {
+  local map="$(mm_createMap "5::true" "abc::true" "15::true and false" "number123::fifteen")"
+  local expected_map="_::true${nl}abc::true${nl}_::true and false${nl}number123::fifteen"
+  test_assert 'test_mm_keysAt1 a' "$map" "$expected_map"
+  local expected="2${nl}abc${nl}number123"
+  local result="$(mm_itemsAt -o key -m "$map" "3${nl}2 4")"
+  test_assert 'test_mm_keysAt1 b' "$result" "$expected"
+}
+
+test_mm_entriesByEntries () {
+  local map="$(mm_createMap "true" "abc::true" "true and false" "number123::fifteen")"
+  local expected_map="_::true${nl}abc::true${nl}_::true and false${nl}number123::fifteen"
+  test_assert 'test_mm_entriesByEntries a' "$map" "$expected_map"
+  local expected="number123::fifteen${nl}2::true and false"
+  local result="$(mm_get -o entry -i entry -m "$map" "number123::fifteen" "2::true and false")"
+  test_assert 'test_mm_entriesByEntries b' "$result" "$expected"
+}
+
+test_mm_elementsByEntries () {
+  local map="$(mm_createMap "true" "abc::true" "true and false" "number123::fifteen")"
+  local expected_map="_::true${nl}abc::true${nl}_::true and false${nl}number123::fifteen"
+  test_assert 'test_mm_elementsByEntries a' "$map" "$expected_map"
+  local expected="number123::fifteen${nl}true and false"
+  local result="$(mm_get -o element -i entry -m "$map" "number123::fifteen" "2::true and false")"
+  test_assert 'test_mm_elementsByEntries b' "$result" "$expected"
+}
+
+test_mm_valuesByEntries () {
+  local map="$(mm_createMap "true" "abc::true" "true and false" "number123::fifteen")"
+  local expected_map="_::true${nl}abc::true${nl}_::true and false${nl}number123::fifteen"
+  test_assert 'test_mm_valuesByEntries a' "$map" "$expected_map"
+  local expected="fifteen${nl}true and false"
+  local result="$(mm_get -o value -i entry -m "$map" "number123::fifteen" "2::true and false")"
+  test_assert 'test_mm_valuesByEntries b' "$result" "$expected"
+}
+
+test_mm_keysByEntries () {
+  local map="$(mm_createMap "true" "abc::true" "true and false" "number123::fifteen")"
+  local expected_map="_::true${nl}abc::true${nl}_::true and false${nl}number123::fifteen"
+  test_assert 'test_mm_keysByEntries a' "$map" "$expected_map"
+  local expected="number123${nl}2"
+  local result="$(mm_get -o key -i entry -m "$map" "number123::fifteen" "2::true and false")"
+  test_assert 'test_mm_keysByEntries b' "$result" "$expected"
+}
+
+test_mm_entriesByElements () {
+  local map="$(mm_createMap "true" "abc::true" "true and false" "number123::fifteen")"
+  local expected_map="_::true${nl}abc::true${nl}_::true and false${nl}number123::fifteen"
+  test_assert 'test_mm_entriesByElements a' "$map" "$expected_map"
+  local expected="2::true and false${nl}number123::fifteen"
+  local result="$(mm_get -o entry -i element -m "$map" "true and false" "number123::fifteen")"
+  test_assert 'test_mm_entriesByElements b' "$result" "$expected"
+}
+
+test_mm_elementsByElements () {
+  local map="$(mm_createMap "true" "abc::true" "true and false" "number123::fifteen")"
+  local expected_map="_::true${nl}abc::true${nl}_::true and false${nl}number123::fifteen"
+  test_assert 'test_mm_elementsByElements a' "$map" "$expected_map"
+  local expected="true and false${nl}number123::fifteen"
+  local result="$(mm_get -o element -i element -m "$map" "true and false" "number123::fifteen")"
+  test_assert 'test_mm_elementsByElements b' "$result" "$expected"
+}
+
+test_mm_valuesByElements () {
+  local map="$(mm_createMap "true" "abc::true" "true and false" "number123::fifteen")"
+  local expected_map="_::true${nl}abc::true${nl}_::true and false${nl}number123::fifteen"
+  test_assert 'test_mm_valuesByElements a' "$map" "$expected_map"
   local expected="true and false${nl}fifteen"
-  local result="$(getValuesByKeys "$array_string" 15)"
-  test_assert 'test_getValuesByKeys 2' "$result" "$expected"
+  local result="$(mm_get -o value -i element -m "$map" "true and false" "number123::fifteen")"
+  test_assert 'test_mm_valuesByElements b' "$result" "$expected"
 }
 
-# Get value from array string by key
-test_getIndexesByKeys1 () {
-  local array_string="$(createArray "5::true" "10::true" "15::true and false" "15::fifteen")"
-  local expected="1"
-  local result="$(getIndexesByKeys "$array_string" 5)"
-  test_assert 'test_getIndexesByKeys 1' "$result" "$expected"
+test_mm_keysByElements () {
+  local map="$(mm_createMap "true" "abc::true" "true and false" "number123::fifteen")"
+  local expected_map="_::true${nl}abc::true${nl}_::true and false${nl}number123::fifteen"
+  test_assert 'test_mm_keysByElements a' "$map" "$expected_map"
+  local expected="2${nl}number123"
+  local result="$(mm_get -o key -i element -m "$map" "true and false" "number123::fifteen")"
+  test_assert 'test_mm_keysByElements b' "$result" "$expected"
 }
 
-# Get value from array string by key
-test_getIndexesByKeys2 () {
-  local array_string="$(createArray "5::true" "10::true" "15::true and false" "15::fifteen")"
-  local expected="3${nl}4"
-  local result="$(getIndexesByKeys "$array_string" 15)"
-  test_assert 'test_getIndexesByKeys 2' "$result" "$expected"
+test_mm_entriesByValues () {
+  local map="$(mm_createMap "true" "abc::true" "true and false" "number123::fifteen")"
+  local expected_map="_::true${nl}abc::true${nl}_::true and false${nl}number123::fifteen"
+  test_assert 'test_mm_entriesByValues a' "$map" "$expected_map"
+  local expected="2::true and false${nl}number123::fifteen"
+  local result="$(mm_get -o entry -i value -m "$map" "true and false" "fifteen")"
+  test_assert 'test_mm_entriesByValues b' "$result" "$expected"
 }
 
-test_getEntriesByKeys1 (){
-  local array_string="$(createArray "5::false" "10::true" "15::true and false" "15::fifteen")"
-  local expected="5::false${nl}15::true and false${nl}15::fifteen"
-  local result="$(getEntriesByKeys "$array_string" 5 15)"
-  test_assert 'test_getEntriesByKeys 1' "$result" "$expected"
+test_mm_elementsByValues () {
+  local map="$(mm_createMap "true" "abc::true" "true and false" "number123::fifteen")"
+  local expected_map="_::true${nl}abc::true${nl}_::true and false${nl}number123::fifteen"
+  test_assert 'test_mm_elementsByValues a' "$map" "$expected_map"
+  local expected="true and false${nl}number123::fifteen"
+  local result="$(mm_get -o element -i value -m "$map" "true and false" "fifteen")"
+  test_assert 'test_mm_elementsByValues b' "$result" "$expected"
 }
 
-test_appendEntries1 () {
-  local array_string1="$(createArray "5::true" "10::true" "15::true and false" "15::fifteen")"
-  local array_string2="$(createArray "20::true" "15::true and true" "15::fifty" "15::one hundred and fifty" "Good evening::true")"
-  local expected="5::true${nl}10::true${nl}15::true and false${nl}15::fifteen
-20::true${nl}15::true and true${nl}15::fifty${nl}15::one hundred and fifty${nl}Good evening::true"
-  local result="$(appendEntries "$array_string1" "$array_string2")"
-  test_assert 'test_appendEntries 1' "$result" "$expected"
+test_mm_valuesByValues () {
+  local map="$(mm_createMap "true" "abc::true" "true and false" "number123::fifteen")"
+  local expected_map="_::true${nl}abc::true${nl}_::true and false${nl}number123::fifteen"
+  test_assert 'test_mm_valuesByValues a' "$map" "$expected_map"
+  local expected="true and false${nl}fifteen"
+  local result="$(mm_get -o value -i value -m "$map" "true and false" "fifteen")"
+  test_assert 'test_mm_valuesByValues b' "$result" "$expected"
 }
 
-test_removeEntriesByKeys1 () {
-  local array_string="$(createArray "5::true" "10::true" "15::true and false" "15::fifteen")"
+test_mm_keysByValues () {
+  local map="$(mm_createMap "true" "abc::true" "true and false" "number123::fifteen")"
+  local expected_map="_::true${nl}abc::true${nl}_::true and false${nl}number123::fifteen"
+  test_assert 'test_mm_keysByValues a' "$map" "$expected_map"
+  local expected="2${nl}number123"
+  local result="$(mm_get -o key -i value -m "$map" "true and false" "fifteen")"
+  test_assert 'test_mm_keysByValues b' "$result" "$expected"
+}
+
+test_mm_entriesByKeys () {
+  local map="$(mm_createMap "true" "abc::true" "true and false" "number123::fifteen")"
+  local expected_map="_::true${nl}abc::true${nl}_::true and false${nl}number123::fifteen"
+  test_assert 'test_mm_entriesByKeys a' "$map" "$expected_map"
+  local expected="2::true and false${nl}number123::fifteen"
+  local result="$(mm_get -o entry -i key -m "$map" "2" "number123")"
+  test_assert 'test_mm_entriesByKeys b' "$result" "$expected"
+}
+
+test_mm_elementsByKeys () {
+  local map="$(mm_createMap "true" "abc::true" "true and false" "number123::fifteen")"
+  local expected_map="_::true${nl}abc::true${nl}_::true and false${nl}number123::fifteen"
+  test_assert 'test_mm_elementsByKeys a' "$map" "$expected_map"
+  local expected="true and false${nl}number123::fifteen"
+  local result="$(mm_get -o element -i key -m "$map" "2" "number123")"
+  test_assert 'test_mm_elementsByKeys b' "$result" "$expected"
+}
+
+test_mm_valuesByKeys () {
+  local map="$(mm_createMap "true" "abc::true" "true and false" "number123::fifteen")"
+  local expected_map="_::true${nl}abc::true${nl}_::true and false${nl}number123::fifteen"
+  test_assert 'test_mm_valuesByKeys a' "$map" "$expected_map"
+  local expected="true and false${nl}fifteen"
+  local result="$(mm_get -o value -i key -m "$map" "2" "number123")"
+  test_assert 'test_mm_valuesByKeys b' "$result" "$expected"
+}
+
+test_mm_keysByKeys () {
+  local map="$(mm_createMap "true" "abc::true" "true and false" "number123::fifteen")"
+  local expected_map="_::true${nl}abc::true${nl}_::true and false${nl}number123::fifteen"
+  test_assert 'test_mm_keysByKeys a' "$map" "$expected_map"
+  local expected="2${nl}number123"
+  local result="$(mm_get -o key -i key -m "$map" "2" "number123")"
+  test_assert 'test_mm_keysByKeys b' "$result" "$expected"
+}
+
+test_mm_append1 () {
+  local map1="$(mm_createMap "5::true" "10::true" "15::true and false" "15::fifteen")"
+  local map2="$(mm_createMap "20::true" "15::true and true" "15::fifty" "15::one hundred and fifty" "Good evening::true")"
+  local expected="_::true${nl}_::true${nl}_::true and false${nl}_::fifteen
+_::true${nl}_::true and true${nl}_::fifty${nl}_::one hundred and fifty${nl}Good evening::true"
+  local result="$(mm_append -m "$map1" "$map2")"
+  test_assert 'test_mm_append1' "$result" "$expected"
+}
+
+test_mm_append2 () {
+  local map1="$(mm_createMap "5::true" "10::true" "15::true and false" "15::fifteen")"
+  local expected="_::true${nl}_::true${nl}_::true and false${nl}_::fifteen
+_::true${nl}_::true and true${nl}_::fifty${nl}_::one hundred and fifty${nl}Good evening::true"
+  local result="$(mm_append -m "$map1" "20::true" "15::true and true" "15::fifty" "15::one hundred and fifty" "Good evening::true")"
+  test_assert 'test_mm_append2' "$result" "$expected"
+}
+
+test_mm_remainingSet () {
+  local expected="3${nl}6${nl}8${nl}9"
+  local result="$(mm_remainingSet -l 9 -- "5${nl}5" 1 2 -3 4)"
+  test_assert 'test_mm_remainingSet b' "$result" "$expected"
+}
+
+test_mm_remainingIndexes () {
+  local map="$(mm_createMap "5::true" "abc::true" "15::true and false" "number123::fifteen")"
+  local expected_map="_::true${nl}abc::true${nl}_::true and false${nl}number123::fifteen"
+  test_assert 'test_mm_remainingIndexes a' "$map" "$expected_map"
+  local expected="1${nl}4"
+  local result="$(mm_remainingIndexes -m "$map" -- "-2 2")"
+  test_assert 'test_mm_remainingIndexes b' "$result" "$expected"
+}
+
+test_mm_removeAt () {
+  local map="$(mm_createMap "5::true" "abc::true" "15::true and false" "number123::fifteen")"
+  local expected_map="_::true${nl}abc::true${nl}_::true and false${nl}number123::fifteen"
+  test_assert 'test_mm_removeAt a' "$map" "$expected_map"
+  local expected="1::true${nl}number123::fifteen"
+  local result="$(mm_removeAt -m "$map" -o entry -- "-2 2")"
+  test_assert 'test_mm_removeAt b' "$result" "$expected"
+}
+
+test_mm_entriesWoEntries () {
+  local map="$(mm_createMap "5::true" "10::true" "15::true and false" "15::fifteen")"
+  local expected="1::true${nl}2::true"
+  local result="$(mm_remove -m "$map" -o entry -i entry -- "4::fifteen" "3::true and false")"
+  test_assert 'test_mm_entriesWoEntries' "$result" "$expected"
+}
+
+test_mm_elementsWoEntries () {
+  local map="$(mm_createMap "5::true" "abc::true" "15::true and false" "number123::fifteen")"
+  local expected="abc::true${nl}true and false"
+  local result="$(mm_remove -m "$map" -o element -i entry -- "number123::fifteen" "1::true")"
+  test_assert 'test_mm_elementsWoEntries' "$result" "$expected"
+}
+
+test_mm_valuesWoEntries () {
+  local map="$(mm_createMap "5::true" "abc::true" "15::true and false" "number123::fifteen")"
+  local expected="true${nl}true and false"
+  local result="$(mm_remove -m "$map" -o value -i entry -- "number123::fifteen" "1::true")"
+  test_assert 'test_mm_valuesWoEntries' "$result" "$expected"
+}
+
+test_mm_keysWoEntries () {
+  local map="$(mm_createMap "5::true" "abc::true" "15::true and false" "number123::fifteen")"
+  local expected="abc${nl}2"
+  local result="$(mm_remove -m "$map" -o key -i entry -- "number123::fifteen" "1::true")"
+  test_assert 'test_mm_keysWoEntries' "$result" "$expected"
+}
+
+# ----------------------------------------------------
+
+test_mm_removeKeys () {
+  local map="$(mm_createMap "5::true" "10::true" "15::true and false" "15::fifteen")"
   local expected="10::true${nl}15::true and false${nl}15::fifteen"
-  local result="$(removeEntriesByKeys "$array_string" 5)"
+  local result="$(mm_removeEntriesByKeys "$map" 5)"
   test_assert 'test_removeEntries 1' "$result" "$expected"
 }
 
-test_removeEntriesByKeys2 () {
-  local array_string="$(createArray "5::true" "10::true" "15::true and false" "15::fifteen")"
+test_mm_removeEntriesByKeys2 () {
+  local map="$(mm_createMap "5::true" "10::true" "15::true and false" "15::fifteen")"
   local expected="5::true${nl}10::true"
-  local result="$(removeEntriesByKeys "$array_string" 15)"
+  local result="$(mm_removeEntriesByKeys "$map" 15)"
   test_assert 'test_removeEntries 1' "$result" "$expected"
 }
 
-test_setEntries1 () {
-  local array_string="$(createArray "5::true" "10::true" "15::true and false" "15::fifteen")"
+test_mm_setEntries1 () {
+  local map="$(mm_createMap "5::true" "10::true" "15::true and false" "15::fifteen")"
   local expected="5::false${nl}10::true${nl}15::true and false${nl}15::fifteen"
-  local result=$(setEntries "$array_string" "5::false")
-  test_assert 'test_setEntries 1' "$result" "$expected"
+  local result=$(mm_setEntries "$map" "5::false")
+  test_assert 'test_mm_setEntries 1' "$result" "$expected"
 }
 
-test_setEntries2 () {
-  local array_string="$(createArray "5::false" "10::true" "15::true and false" "15::fifteen")"
+test_mm_setEntries2 () {
+  local map="$(mm_createMap "5::false" "10::true" "15::true and false" "15::fifteen")"
   local expected="5::false${nl}10::true${nl}15::true and false${nl}15::fifteen${nl}25::false and false"
-  local result=$(setEntries "$array_string" "25::false and false")
-  test_assert 'test_setEntries 2' "$result" "$expected"
+  local result=$(mm_setEntries "$map" "25::false and false")
+  test_assert 'test_mm_setEntries 2' "$result" "$expected"
 }
 
-# merge two substitution strings of associative array
-test_setEntries3 () {
-  local array_string1="$(createArray "5::true" "10::true" "15::true and false" "15::fifteen")"
-  local array_string3="$(createArray "20::true" "15::true and true" "15::fifty" "15::one hundred and fifty" "Good evening::true")"
+# merge two substitution strings of multimap
+test_mm_setEntries3 () {
+  local map1="$(mm_createMap "5::true" "10::true" "15::true and false" "15::fifteen")"
+  local map3="$(mm_createMap "20::true" "15::true and true" "15::fifty" "15::one hundred and fifty" "Good evening::true")"
   local expected="5::true${nl}10::true${nl}15::true and true${nl}15::fifty${nl}20::true${nl}15::one hundred and fifty${nl}Good evening::true"
-  local result="$(setEntries "$array_string1" "$array_string3")"
-  test_assert 'test_setEntries 3' "$result" "$expected"
+  local result="$(mm_setEntries "$map1" "$map3")"
+  test_assert 'test_mm_setEntries 3' "$result" "$expected"
 }
 
-# set pairs in associative array
-test_setPairs1 () {
-  local array_string="$(createArray "5::true" "10::true" "15::true and false" "15::fifteen")"
+# set pairs in multimap
+test_mm_setPairs1 () {
+  local map="$(mm_createMap "5::true" "10::true" "15::true and false" "15::fifteen")"
   local expected="5::false${nl}10::true${nl}15::true and false${nl}15::fifteen"
-  local result="$(setPairs "$array_string" "5" "false")"
-  test_assert 'test_setPairs 1' "$result" "$expected"
+  local result="$(mm_setPairs "$map" "5" "false")"
+  test_assert 'test_mm_setPairs 1' "$result" "$expected"
 }
 
-# set pairs in associative array
-test_setPairs2 () {
-  local array_string="$(createArray "5::true" "10::true" "15::true and false" "15::fifteen")"
+# set pairs in multimap
+test_mm_setPairs2 () {
+  local map="$(mm_createMap "5::true" "10::true" "15::true and false" "15::fifteen")"
   local expected="5::true${nl}10::true${nl}15::true and true${nl}15::fifty${nl}20::true${nl}15::one hundred and fifty${nl}Good evening::true"
-  local result="$(setPairs "$array_string" "20" "true" "15" "true and true" "15" "fifty" "15" "one hundred and fifty" "Good evening" "true")"
-  test_assert 'test_setPairs 2' "$result" "$expected"
+  local result="$(mm_setPairs "$map" "20" "true" "15" "true and true" "15" "fifty" "15" "one hundred and fifty" "Good evening" "true")"
+  test_assert 'test_mm_setPairs 2' "$result" "$expected"
 }
 
 test_run () {
-  test_createArray1 && echo 0 || echo 1
-  test_createArray2 && echo 0 || echo 1
-  test_iterateArray1 && echo 0 || echo 1
-  test_iterateArray2 && echo 0 || echo 1
-  test_getValuesByKeys1 && echo 0 || echo 1
-  test_getValuesByKeys2 && echo 0 || echo 1
-  test_getIndexesByKeys1 && echo 0 || echo 1
-  test_getIndexesByKeys2 && echo 0 || echo 1
-  test_getEntriesByKeys1 && echo 0 || echo 1
-  test_removeEntriesByKeys1 && echo 0 || echo 1
-  test_removeEntriesByKeys2 && echo 0 || echo 1
-  test_setEntries1 && echo 0 || echo 1
-  test_setEntries2 && echo 0 || echo 1
-  test_setEntries3 && echo 0 || echo 1
-  test_appendEntries1 && echo 0 || echo 1
-  test_setPairs1 && echo 0 || echo 1
-  test_setPairs2 && echo 0 || echo 1
+
+  test_mm_createMap1 && echo 0 || echo 1
+  test_mm_createMap2 && echo 0 || echo 1
+  test_mm_createMap3 && echo 0 || echo 1
+  test_mm_iterateMap1 && echo 0 || echo 1
+  test_mm_iterateMap2 && echo 0 || echo 1
+  test_mm_iterateMap3 && echo 0 || echo 1
+  test_mm_lastIndex && echo 0 || echo 1
+  test_mm_lastNumKey && echo 0 || echo 1
+  test_mm_checkIndexes1 && echo 0 || echo 1
+  test_mm_checkIndexes2 && echo 0 || echo 1
+  test_mm_checkIndexes3 && echo 0 || echo 1
+  test_mm_entries && echo 0 || echo 1
+  test_mm_elements && echo 0 || echo 1
+  test_mm_values && echo 0 || echo 1
+  test_mm_keys && echo 0 || echo 1
+  test_mm_indexesOfEntries1 && echo 0 || echo 1
+  test_mm_indexesOfEntries2 && echo 0 || echo 1
+  test_mm_indexesOfEntries3 && echo 0 || echo 1
+  test_mm_indexesOfElements1 && echo 0 || echo 1
+  test_mm_indexesOfElements2 && echo 0 || echo 1
+  test_mm_indexesOfElements3 && echo 0 || echo 1
+  test_mm_indexesOfValues1 && echo 0 || echo 1
+  test_mm_indexesOfValues2 && echo 0 || echo 1
+  test_mm_indexesOfValues3 && echo 0 || echo 1
+  test_mm_indexesOfKeys1 && echo 0 || echo 1
+  test_mm_indexesOfKeys2 && echo 0 || echo 1
+  test_mm_indexesOfKeys3 && echo 0 || echo 1
+  test_mm_entriesAt1 && echo 0 || echo 1
+  test_mm_entriesAt2 && echo 0 || echo 1
+  test_mm_entriesAt3 && echo 0 || echo 1
+  test_mm_elementsAt1 && echo 0 || echo 1
+  test_mm_valuesAt1 && echo 0 || echo 1
+  test_mm_keysAt1 && echo 0 || echo 1
+  test_mm_entriesByEntries && echo 0 || echo 1
+  test_mm_elementsByEntries && echo 0 || echo 1
+  test_mm_valuesByEntries && echo 0 || echo 1
+  test_mm_keysByEntries && echo 0 || echo 1
+  test_mm_entriesByElements && echo 0 || echo 1
+  test_mm_elementsByElements && echo 0 || echo 1
+  test_mm_valuesByElements && echo 0 || echo 1
+  test_mm_keysByElements && echo 0 || echo 1
+  test_mm_entriesByValues && echo 0 || echo 1
+  test_mm_elementsByValues && echo 0 || echo 1
+  test_mm_valuesByValues && echo 0 || echo 1
+  test_mm_keysByValues && echo 0 || echo 1
+  test_mm_entriesByKeys && echo 0 || echo 1
+  test_mm_elementsByKeys && echo 0 || echo 1
+  test_mm_valuesByKeys && echo 0 || echo 1
+  test_mm_keysByKeys && echo 0 || echo 1
+  test_mm_append1 && echo 0 || echo 1
+  test_mm_append2 && echo 0 || echo 1
+  test_mm_remainingSet && echo 0 || echo 1
+  test_mm_remainingIndexes && echo 0 || echo 1
+  test_mm_removeAt && echo 0 || echo 1
+  test_mm_entriesWoEntries && echo 0 || echo 1
+  test_mm_elementsWoEntries && echo 0 || echo 1
+  test_mm_valuesWoEntries && echo 0 || echo 1
+  test_mm_keysWoEntries && echo 0 || echo 1
+  # test_mm_removeEntriesByKeys1 && echo 0 || echo 1
+  # test_mm_removeEntriesByKeys2 && echo 0 || echo 1
+  # test_mm_setEntries1 && echo 0 || echo 1
+  # test_mm_setEntries2 && echo 0 || echo 1
+  # test_mm_setEntries3 && echo 0 || echo 1
+  # test_mm_appendEntries1 && echo 0 || echo 1
+  # test_mm_setPairs1 && echo 0 || echo 1
+  # test_mm_setPairs2 && echo 0 || echo 1
+  echo -n ""
 }
 
 test_report () {
@@ -188,4 +656,71 @@ test_report () {
 
 test_report
 
+# test_options () {
+#   local i="entry"
+#   local a=""
+#   local o="entry"
+#   while getopts ':i:a:o:' opt; do
+#     echo "Option: $opt, Argument: ${OPTARG:-<none>}" >&2
+#     case $opt in
+#       (i|a|o) [ -n "${OPTARG}" ] && local $opt="${OPTARG}";;
+#       (\?) mm_errorUnknownOption "${OPTARG}";;
+#     esac
+#   done
+#   shift "$((OPTIND - 1))"
+#   echo input type: $i
+#   echo aa name: $a
+#   echo output type: $o
+#   echo "Remaining arguments: $@"
+# }
 
+# # test_options -m "5::true" -o element -f "10::true" "15::true and false"
+
+# test_digits () {
+
+#   while [ $# -gt 0 ]; do
+#     echo "Testing: '$1'" >&2
+#     case $1 in
+#       ('' | *[!0123456789]*) echo >&2 "Not an positive integer."; return 1;;
+#       ([!0]*) echo >&2 "Positive integer.";;
+#       (0*[!0]*) echo >&2 "Positive integer written with a leading zero.";;
+#       (*) echo >&2 "Zero." ; return 1;;
+#       esac
+#     shift
+#   done
+# }
+
+# # mm_checkIndexes -l 9 -- 1 2 -3 "4 8" "5${nl}5"
+# # echo
+# # mm_remainingSet -l 9 -- "5${nl}5" 1 2 -3 4
+# # mm_remainingIndexes -m "_::true${nl}abc::true${nl}_::true and false${nl}number123::fifteen" -- "-2 2"
+# mm_checkArguments -i entry "1::true            ${nl}          ab:c::tr:ue${nl}       2::true and false           ${nl}number123::fifteen"
+# echo
+# mm_checkArguments -i element "true            ${nl}          ab:c::tr:ue${nl}       true and false           ${nl}number123::fifteen"
+# echo
+# mm_checkArguments -i key "1            ${nl}          ab:c${nl}       2           ${nl}number123"
+# echo
+# mm_checkArguments -i value "true            ${nl}          tr:ue${nl}       true and false           ${nl}fifteen"
+
+# test_nlsv () {
+#   printf '%s\n' "$@" | awk '{ gsub(/^[ \t]+|[ \t]+$/, ""); print }' | awk '
+#   BEGIN { FS="\n"; RS = "\n\n"; ORS = "\n"; }
+#   { if ($0 == "") { next; } }
+#   { if ( $2 == "") { $2 = $1; $1 = "_"; } }
+#   { print "[" $1 "]:=" $2 }
+#   '
+# }
+
+# test_nlsv "
+
+# news and articles
+
+#   tag
+#   tech
+
+#   tag
+#   ai
+
+#     category1           ${nl}    science                     ${nl}
+#     simply text
+# "
